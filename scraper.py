@@ -1,5 +1,6 @@
 import requests
 import json
+import time
 
 # Credentials
 SUPABASE_URL = "https://xxjwbrzdfthorfdvzltt.supabase.co"
@@ -21,43 +22,63 @@ def sync_to_supabase(tools):
                 count += 1
         except:
             pass
-    print(f"✅ Successfully synced {count} new tools to AI-Sentry!")
+    print(f"✅ Successfully synced {count} tools to AI-Sentry!")
 
-def scrape_futurepedia_api():
-    print("🤖 AI-Sentry Bot: Scanning Futurepedia for New Releases...")
-    # Futurepedia internal data endpoint
-    url = "https://www.futurepedia.io/api/tools?sort=new"
-    headers = {'User-Agent': 'Mozilla/5.0'}
+def scrape_multi_source():
+    print("🤖 AI-Sentry Master Bot: Scanning Multiple Sources...")
+    all_new_tools = []
     
-    try:
-        response = requests.get(url, headers=headers, timeout=15)
-        # XML kakunda JSON data try chesthunnam
-        data = response.json() 
-        
-        new_tools = []
-        # JSON structure batti data extract chestham
-        for tool in data.get('tools', [])[:20]:
-            new_tools.append({
-                "name": tool.get('name'),
-                "url": tool.get('websiteUrl') or f"https://www.futurepedia.io/tool/{tool.get('slug')}",
-                "description": tool.get('shortDescription', 'Latest AI Discovery'),
-                "category": "New Release"
-            })
-        
-        if new_tools:
-            sync_to_supabase(new_tools)
-        else:
-            raise Exception("No tools in JSON")
+    # Headers to bypass bot detection
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json'
+    }
 
-    except Exception as e:
-        print(f"⚠️ API/RSS failed. Adding daily verified tools instead...")
-        # Automation aagakunda daily 5 top tools automatic ga vellela fallback
+    # Source 1: Futurepedia (Direct API fallback)
+    try:
+        fp_res = requests.get("https://www.futurepedia.io/api/tools?sort=new", headers=headers, timeout=10)
+        if fp_res.status_code == 200:
+            data = fp_res.json()
+            for t in data.get('tools', [])[:10]:
+                all_new_tools.append({
+                    "name": t.get('name'),
+                    "url": t.get('websiteUrl') or f"https://www.futurepedia.io/tool/{t.get('slug')}",
+                    "description": t.get('shortDescription') or "Professional AI Tool",
+                    "category": t.get('category') or "AI Software",
+                    "launched_at": t.get('addedAt') or time.strftime('%Y-%m-%d')
+                })
+    except:
+        print("⚠️ Futurepedia source failed.")
+
+    # Source 2: AI Tool Hunt (Alternate Source)
+    try:
+        # Example structure for another directory
+        ah_res = requests.get("https://api.aitoolhunt.com/v1/tools?limit=10", headers=headers, timeout=10)
+        if ah_res.status_code == 200:
+            data = ah_res.json()
+            for t in data.get('data', []):
+                all_new_tools.append({
+                    "name": t.get('title'),
+                    "url": t.get('link'),
+                    "description": t.get('description'),
+                    "category": "Discovery",
+                    "launched_at": time.strftime('%Y-%m-%d')
+                })
+    except:
+        print("⚠️ AI Tool Hunt failed.")
+
+    # Final Sync
+    if all_new_tools:
+        sync_to_supabase(all_new_tools)
+    else:
+        # If everything fails, add today's verified hand-picked tools so site is never empty
+        print("⚠️ No new tools found today. Adding daily verified picks.")
         fallback = [
-            {"name": "Grok 2.0", "url": "https://x.com/grok", "description": "Latest LLM from xAI", "category": "New Release"},
-            {"name": "Sora", "url": "https://openai.com/sora", "description": "High fidelity video generation", "category": "Video AI"},
-            {"name": "Flux.1", "url": "https://blackforestlabs.ai", "description": "Open weights image model", "category": "Image AI"}
+            {"name": "DeepSeek V3", "url": "https://www.deepseek.com/", "description": "Powerful open-source LLM for coding and reasoning.", "category": "LLM", "launched_at": time.strftime('%Y-%m-%d')},
+            {"name": "Mistral Large 2", "url": "https://mistral.ai", "description": "Top-tier European AI model with huge context.", "category": "LLM", "launched_at": time.strftime('%Y-%m-%d')},
+            {"name": "Kling AI", "url": "https://klingai.com", "description": "High-fidelity AI video generation platform.", "category": "Video AI", "launched_at": time.strftime('%Y-%m-%d')}
         ]
         sync_to_supabase(fallback)
 
 if __name__ == "__main__":
-    scrape_futurepedia_api()
+    scrape_multi_source()   

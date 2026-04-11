@@ -1,11 +1,11 @@
 "use client";
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { supabase } from './supabase'; 
 import AuthModal from './components/AuthModal';
 
 export default function HomePage() {
   const [tools, setTools] = useState<any[]>([]);
-  const [filteredTools, setFilteredTools] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState('All');
   const [favorites, setFavorites] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -17,13 +17,11 @@ export default function HomePage() {
   useEffect(() => {
     fetchTools();
     checkUser();
-    
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
       if (session?.user) fetchFavorites(session.user.id);
       else setFavorites([]);
     });
-
     return () => subscription.unsubscribe();
   }, []);
 
@@ -34,8 +32,10 @@ export default function HomePage() {
   }
 
   async function fetchTools() {
+    setLoading(true);
     const { data } = await supabase.from('tools').select('*').order('launched_at', { ascending: false });
-    if (data) { setTools(data); setFilteredTools(data); }
+    if (data) setTools(data);
+    setTimeout(() => setLoading(false), 800); // Luxury delay for skeleton
   }
 
   async function fetchFavorites(userId: string) {
@@ -44,10 +44,7 @@ export default function HomePage() {
   }
 
   const toggleFavorite = async (id: string) => {
-    if (!user) {
-      setIsAuthOpen(true);
-      return;
-    }
+    if (!user) { setIsAuthOpen(true); return; }
     const isFav = favorites.includes(id);
     if (isFav) {
       setFavorites(favorites.filter(f => f !== id));
@@ -58,159 +55,157 @@ export default function HomePage() {
     }
   };
 
-  const startVoiceSearch = () => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitRecognition;
-    if (!SpeechRecognition) return;
-    const recognition = new SpeechRecognition();
-    recognition.onstart = () => setIsListening(true);
-    recognition.onresult = (e: any) => { setSearchQuery(e.results[0][0].transcript); setIsListening(false); };
-    recognition.start();
-  };
-
-  useEffect(() => {
-    let result = tools;
-    if (activeCategory !== 'All') result = result.filter(t => t.category === activeCategory);
-    if (searchQuery) result = result.filter(t => t.name.toLowerCase().includes(searchQuery.toLowerCase()));
-    if (showFavoritesOnly) result = result.filter(t => favorites.includes(t.id.toString()));
-    setFilteredTools(result);
+  const filteredTools = useMemo(() => {
+    return tools.filter(t => {
+      const matchesCat = activeCategory === 'All' || t.category === activeCategory;
+      const matchesSearch = t.name.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesFav = showFavoritesOnly ? favorites.includes(t.id.toString()) : true;
+      return matchesCat && matchesSearch && matchesFav;
+    });
   }, [activeCategory, searchQuery, tools, showFavoritesOnly, favorites]);
 
-  const categories = ['All', ...new Set(tools.map(t => t.category))];
+  const categories = useMemo(() => {
+    const cats = [...new Set(tools.map(t => t.category))].sort((a, b) => a.localeCompare(b));
+    return ['All', ...cats];
+  }, [tools]);
 
   return (
-    <div className="flex h-screen bg-[#020202] text-white overflow-hidden font-sans selection:bg-blue-500/30">
+    <div className="flex h-screen text-slate-300 overflow-hidden font-sans relative" 
+         style={{ background: 'radial-gradient(circle at 50% -20%, #0d1224 0%, #020308 80%)' }}>
       
-      {/* SIDEBAR - Width Increased to 80 */}
-      <aside className="w-80 bg-[#050505] border-r border-white/[0.05] flex flex-col p-8 z-20 shadow-2xl">
-        <div className="mb-12">
-          <h2 className="text-2xl font-black tracking-tighter italic bg-gradient-to-r from-white to-blue-500 bg-clip-text text-transparent uppercase tracking-[0.1em]">AI SENTRY</h2>
-          <div className="h-[1px] w-full bg-blue-500/20 mt-2 shadow-[0_0_15px_rgba(59,130,246,0.4)]"></div>
+      {/* 🔮 Cosmic Atmosphere */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-indigo-600/5 blur-[120px] rounded-full"></div>
+        <div className="absolute bottom-[-10%] left-[-10%] w-[400px] h-[400px] bg-blue-600/5 blur-[100px] rounded-full opacity-50"></div>
+      </div>
+
+      {/* 🚀 CLASSY SIDEBAR */}
+      <aside className="w-72 bg-black/40 backdrop-blur-3xl border-r border-white/5 flex flex-col z-30">
+        <div className="p-10 pb-6">
+          <div className="flex items-center gap-3">
+             <div className="w-1 h-7 bg-indigo-500 rounded-full shadow-[0_0_15px_#6366f1] animate-pulse"></div>
+             <h2 className="text-xl font-bold tracking-[0.2em] text-white uppercase drop-shadow-md">AI SENTRY</h2>
+          </div>
+          <p className="text-[9px] text-slate-500 font-bold tracking-[0.4em] mt-3 pl-4 uppercase">Neural Hub</p>
         </div>
         
-        <nav className="flex-1 space-y-2 overflow-y-auto no-scrollbar">
-          <p className="text-[10px] text-white/20 uppercase font-bold tracking-[0.2em] mb-6 px-4">Workspace Hub</p>
-          {categories.map(cat => (
-            <button 
-              key={cat} 
-              onClick={() => { setActiveCategory(cat); setShowFavoritesOnly(false); }}
-              className={`w-full text-left px-4 py-3 rounded-xl text-lg transition-all duration-500 ${activeCategory === cat && !showFavoritesOnly ? 'bg-white/5 text-white border border-white/10 shadow-lg' : 'text-white/30 hover:text-white hover:translate-x-1'}`}
-            >
-              {cat}
-            </button>
-          ))}
+        <nav className="flex-1 px-4 space-y-1 overflow-y-auto no-scrollbar py-4">
+          {categories.map(cat => {
+            const count = tools.filter(t => t.category === cat).length;
+            return (
+              <button 
+                key={cat} 
+                onClick={() => { setActiveCategory(cat); setShowFavoritesOnly(false); }}
+                className={`w-full text-left px-5 py-3 rounded-xl text-sm font-medium transition-all duration-300 flex items-center justify-between group ${activeCategory === cat && !showFavoritesOnly ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/10' : 'text-slate-500 hover:text-slate-200 hover:bg-white/5'}`}
+              >
+                {cat}
+                <span className={`text-[9px] font-mono ${activeCategory === cat ? 'opacity-100' : 'opacity-20'}`}>
+                  {cat === 'All' ? tools.length : count}
+                </span>
+              </button>
+            );
+          })}
         </nav>
 
-        {/* Favorites Section with High Glow */}
-        <div className="mt-auto pt-6 border-t border-white/5">
-            <button 
-                onClick={() => setShowFavoritesOnly(!showFavoritesOnly)}
-                className="flex items-center gap-4 group w-full"
-            >
-                <span className={`text-2xl transition-all duration-300 ${showFavoritesOnly ? 'text-red-500 drop-shadow-[0_0_15px_rgba(239,68,68,1)] scale-110' : 'text-white/20'}`}>❤️</span>
-                <span className={`text-xs font-bold tracking-widest uppercase transition-colors ${showFavoritesOnly ? 'text-white' : 'text-white/30 group-hover:text-white'}`}>My Favorites</span>
+        <div className="p-6 mt-auto border-t border-white/5">
+            <button onClick={() => setShowFavoritesOnly(!showFavoritesOnly)}
+                className={`flex items-center gap-4 w-full p-4 rounded-2xl border transition-all duration-500 ${showFavoritesOnly ? 'bg-red-500/10 border-red-500/20 text-red-500' : 'bg-white/5 border-transparent text-slate-500 hover:text-white'}`}>
+                <span className={`text-xl transition-all ${showFavoritesOnly ? 'drop-shadow-[0_0_12px_#ef4444] scale-110' : 'opacity-20'}`}>❤️</span>
+                <span className="text-[10px] font-bold uppercase tracking-widest">Favorites Vault</span>
             </button>
         </div>
       </aside>
 
-      {/* MAIN CONTENT AREA */}
-      <main className="flex-1 flex flex-col relative overflow-hidden bg-[#020202]">
-        {/* Deep UI Glow Effects */}
-        <div className="absolute top-[-15%] left-[20%] w-[700px] h-[700px] bg-blue-600/10 blur-[150px] rounded-full pointer-events-none animate-pulse"></div>
-        <div className="absolute bottom-[-10%] right-[0%] w-[500px] h-[500px] bg-purple-900/10 blur-[120px] rounded-full pointer-events-none"></div>
-
-        {/* LUXURY HEADER */}
-        <header className="h-24 flex items-center justify-between px-12 border-b border-white/[0.05] bg-[#020202]/50 backdrop-blur-3xl z-10">
-          
-          {/* ⚡ NEW TOOLS COUNT DISPLAY */}
-          <div className="flex items-center gap-6">
-            <div className="flex flex-col">
-              <span className="text-[10px] font-black text-white/20 uppercase tracking-[0.3em]">System Status</span>
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse shadow-[0_0_8px_#22c55e]"></span>
-                <span className="text-sm font-bold text-white/80 uppercase tracking-tighter">Active Nodes</span>
-              </div>
-            </div>
-            <div className="bg-white/5 border border-white/10 px-4 py-1.5 rounded-lg shadow-inner">
-                <span className="text-xl font-black text-blue-500 drop-shadow-[0_0_10px_rgba(59,130,246,0.6)]">
-                    {filteredTools.length < 10 ? `0${filteredTools.length}` : filteredTools.length}
-                </span>
-            </div>
+      {/* 💎 MAIN CONTENT */}
+      <main className="flex-1 flex flex-col relative z-10">
+        
+        {/* PREMIUM HEADER */}
+        <header className="h-20 flex items-center justify-between px-10 border-b border-white/5 bg-[#020308]/40 backdrop-blur-xl z-20">
+          <div className="flex flex-col">
+             <span className="text-[9px] font-black text-indigo-500/40 tracking-[0.3em] uppercase">Status: Online</span>
+             <div className="flex items-center gap-2 mt-0.5">
+                <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse shadow-[0_0_8px_#22c55e]"></span>
+                <span className="text-xl font-bold text-white tracking-tighter tabular-nums">{filteredTools.length} Nodes</span>
+             </div>
           </div>
 
-          <div className="w-1/3 relative flex items-center bg-white/[0.03] border border-white/[0.08] rounded-2xl px-6 py-3 focus-within:border-blue-500/40 transition-all duration-500">
+          {/* LUXURY WIDE SEARCH */}
+          <div className="w-[55%] relative group">
             <input 
                 type="text" 
-                placeholder="Intelligence search..." 
+                placeholder="Query intelligence..." 
                 value={searchQuery} 
                 onChange={(e) => setSearchQuery(e.target.value)} 
-                className="bg-transparent border-none focus:outline-none text-sm w-full placeholder:text-white/10" 
+                className="w-full bg-white/[0.02] border border-white/5 rounded-2xl px-6 py-3.5 focus:outline-none focus:ring-1 focus:ring-indigo-500/20 focus:border-indigo-500/40 transition-all text-sm placeholder:text-slate-700 text-white shadow-2xl" 
             />
-            <button onClick={startVoiceSearch} className={`text-lg transition-colors ${isListening ? 'text-red-500 animate-pulse' : 'text-white/20 hover:text-white'}`}>
-              🎤
-            </button>
           </div>
 
-          <div className="flex items-center gap-8">
+          <div className="flex items-center gap-6">
              {user ? (
-               <div className="flex items-center gap-4 bg-white/[0.03] pl-5 pr-2 py-1.5 rounded-full border border-white/10 backdrop-blur-md">
-                 <div className="flex flex-col items-end">
-                    <span className="text-[10px] font-black text-white/80 leading-tight">{user.email.split('@')[0].toUpperCase()}</span>
-                    <span className="text-[7px] font-bold text-blue-500 tracking-tighter">AUTH_VERIFIED</span>
-                 </div>
-                 <button onClick={() => supabase.auth.signOut()} className="bg-red-500/10 hover:bg-red-600 text-red-500 hover:text-white text-[9px] font-black px-4 py-2 rounded-full transition-all duration-500 tracking-widest">LOGOUT</button>
+               <div className="flex items-center gap-4 bg-white/[0.02] p-1.5 px-4 rounded-2xl border border-white/5">
+                  <span className="text-[10px] font-bold text-indigo-400 font-mono tracking-tighter uppercase">{user.email.split('@')[0]}</span>
+                  <button onClick={() => supabase.auth.signOut()} className="text-[9px] font-bold text-slate-500 hover:text-red-500 transition-colors uppercase tracking-[0.2em]">Logout</button>
                </div>
              ) : (
-               <button onClick={() => setIsAuthOpen(true)} className="text-[11px] font-bold uppercase bg-white text-black px-8 py-3 rounded-full hover:bg-blue-600 hover:text-white transition-all duration-500 shadow-[0_0_20px_rgba(255,255,255,0.1)]">
-                  Access Portal
+               <button onClick={() => setIsAuthOpen(true)} className="bg-white text-black text-[11px] font-black px-10 py-3.5 rounded-full hover:bg-indigo-600 hover:text-white transition-all shadow-[0_10px_20px_rgba(255,255,255,0.1)] uppercase tracking-widest">
+                  LOGIN
                </button>
              )}
           </div>
         </header>
 
-        {/* 3-COLUMN DISCOVERY GRID */}
-        <div className="flex-1 overflow-y-auto p-12 no-scrollbar relative z-10">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {filteredTools.map((tool) => (
-              <div key={tool.id} className="group relative bg-white/[0.01] border border-white/[0.05] rounded-[35px] p-8 hover:bg-white/[0.03] hover:border-blue-500/30 transition-all duration-700 shadow-2xl">
-                
-                <div className="flex justify-between items-start mb-6 text-left">
-                  <div className="flex flex-col gap-1">
-                    <span className="text-[9px] text-blue-500 font-black tracking-[0.25em] uppercase drop-shadow-sm">{tool.category}</span>
-                    <h3 className="text-2xl font-bold tracking-tight text-white/90 group-hover:text-white transition-colors">{tool.name}</h3>
+        {/* TOOL GRID */}
+        <div className="flex-1 overflow-y-auto p-12 no-scrollbar">
+          {loading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+               {[1,2,3,4,5,6].map(i => <div key={i} className="h-64 bg-white/[0.02] rounded-[32px] border border-white/5 animate-pulse"></div>)}
+            </div>
+          ) : filteredTools.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 animate-in fade-in slide-in-from-bottom-4 duration-1000">
+              {filteredTools.map((tool) => {
+                const isNew = (new Date().getTime() - new Date(tool.launched_at || '2020-01-01').getTime()) < (30 * 24 * 60 * 60 * 1000);
+                return (
+                  <div key={tool.id} className="group relative bg-[#111116]/40 border border-white/[0.05] rounded-[32px] p-8 hover:bg-[#16161c] hover:border-indigo-500/30 hover:-translate-y-2 transition-all duration-500 flex flex-col justify-between shadow-xl shadow-black/20">
+                    
+                    <div className="relative z-10">
+                      <div className="flex justify-between items-start mb-6">
+                        <div className="space-y-1 text-left">
+                          <div className="flex items-center gap-2">
+                             <span className="text-[9px] text-indigo-400 font-bold tracking-[0.2em] uppercase">{tool.category}</span>
+                             {isNew && <span className="bg-indigo-500/20 text-indigo-400 text-[8px] font-black px-2 py-0.5 rounded-full animate-pulse border border-indigo-500/20">NEW</span>}
+                          </div>
+                          <h3 className="text-xl font-semibold text-white/90 group-hover:text-white transition-colors tracking-tight leading-tight">{tool.name}</h3>
+                        </div>
+                        <button onClick={() => toggleFavorite(tool.id.toString())} className="p-1 hover:scale-125 transition-transform duration-300">
+                            <svg className={`w-6 h-6 transition-all duration-500 ${favorites.includes(tool.id.toString()) ? 'fill-red-500 text-red-500 filter drop-shadow-[0_0_10px_#ef4444]' : 'text-slate-700 opacity-40 hover:opacity-100'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path>
+                            </svg>
+                        </button>
+                      </div>
+
+                      <p className="text-sm text-slate-500 leading-relaxed mb-8 line-clamp-3 text-left font-medium">
+                        {tool.description}
+                      </p>
+                    </div>
+
+                    <div className="relative z-10 flex items-center justify-between pt-6 border-t border-white/5 mt-auto">
+                        <span className="text-[10px] font-bold text-slate-600 font-mono tracking-widest uppercase">
+                           AI {tool.category} System
+                        </span>
+                        <a href={tool.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-[11px] font-bold text-white/20 hover:text-indigo-400 transition-all uppercase tracking-[0.2em] group/btn">
+                           Launch <span className="group-hover/btn:translate-x-1 transition-transform">→</span>
+                        </a>
+                    </div>
                   </div>
-                  <button onClick={() => toggleFavorite(tool.id.toString())} className="text-xl transition-all duration-300 hover:scale-125 active:scale-150">
-                    {favorites.includes(tool.id.toString()) ? 
-                      <span className="text-red-500 drop-shadow-[0_0_15px_#ef4444]">❤️</span> : 
-                      <span className="text-white/10 hover:text-white/40">❤️</span>
-                    }
-                  </button>
-                </div>
-
-                <p className="text-sm text-white/30 leading-relaxed mb-8 line-clamp-3 font-medium italic text-left">
-                  {tool.description}
-                </p>
-
-                <div className="bg-black/50 rounded-[22px] p-5 mb-8 border border-white/[0.03] shadow-inner group-hover:border-blue-500/10 transition-colors">
-                    <p className="text-[10px] text-white/40 uppercase font-bold tracking-tighter leading-relaxed">
-                      <span className="text-blue-500 mr-2 underline decoration-blue-500/30 underline-offset-4 tracking-normal font-black">CORE CAPABILITY:</span> 
-                      Advanced {tool.category} neural-processing system.
-                    </p>
-                </div>
-
-                <div className="flex items-center justify-between pt-6 border-t border-white/[0.03]">
-                  <div className="flex items-center gap-3">
-                    <span className="text-[10px] font-bold text-white/10 uppercase tracking-widest font-mono">
-                        {tool.launched_at ? new Date(tool.launched_at).getFullYear() : '2026'} PROTOCOL
-                    </span>
-                    <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-ping opacity-70 shadow-[0_0_5px_#3b82f6]"></span>
-                  </div>
-                  <a href={tool.url} target="_blank" rel="noopener noreferrer" className="text-[10px] font-black text-white/20 hover:text-blue-400 tracking-[0.15em] uppercase transition-all duration-300 group-hover:translate-x-1">
-                    Launch Node →
-                  </a>
-                </div>
-              </div>
-            ))}
-          </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="h-full flex flex-col items-center justify-center text-slate-700 animate-in fade-in duration-700">
+               <span className="text-5xl mb-4">🔍</span>
+               <p className="text-xs font-bold uppercase tracking-[0.4em]">No Results in Network</p>
+            </div>
+          )}
         </div>
       </main>
 
